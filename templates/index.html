@@ -132,7 +132,7 @@
             const password = document.getElementById("password").value;
             const response = await fetch("/auth/register", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrfToken },
                 body: JSON.stringify({ username, password }),
             });
 
@@ -149,7 +149,7 @@
             const password = document.getElementById("password").value;
             const response = await fetch("/auth/login", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrfToken },
                 body: JSON.stringify({ username, password }),
             });
 
