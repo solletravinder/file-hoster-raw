@@ -1,0 +1,30 @@
+services:
+  web:
+    build: .
+    container_name: flask_app
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    ports:
+      - "5000:5000"
+    command: ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]
+    networks:
+      - app_network
+    volumes:
+      - uploads:/app/uploads
+
+  redis:
+    image: redis:7
+    container_name: redis_cache
+    restart: always
+    networks:
+      - app_network
+
+volumes:
+  uploads:
+
+networks:
+  app_network:
+    driver: bridge
