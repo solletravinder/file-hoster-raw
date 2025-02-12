@@ -72,8 +72,8 @@
         </div>
 
         <!-- File List -->
-        <h3>Your Files</h3>
-        <div id="file-list"></div>
+        <h3 id="file-list-heading" class="hidden">Your Files</h3>
+        <div id="file-list" class="hidden"></div>
     </div>
 
     <script>
@@ -85,11 +85,15 @@
                 document.getElementById("auth-section").classList.add("hidden");
                 document.getElementById("upload-section").classList.remove("hidden");
                 document.getElementById("logout-btn").classList.remove("hidden");
+                document.getElementById("file-list").classList.remove("hidden");
+                document.getElementById("file-list-heading").classList.remove("hidden");
                 loadFiles();
             } else {
                 document.getElementById("auth-section").classList.remove("hidden");
                 document.getElementById("upload-section").classList.add("hidden");
                 document.getElementById("logout-btn").classList.add("hidden");
+                document.getElementById("file-list").classList.add("hidden");
+                document.getElementById("file-list-heading").classList.add("hidden");
             }
         }
 
@@ -159,6 +163,7 @@
                 localStorage.setItem("token", token);
                 alert("Login successful!");
                 loadFiles();
+                updateUI();
             } else {
                 alert(data.error);
             }
