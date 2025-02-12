@@ -6,6 +6,7 @@ from config import config
 from auth import auth, token_required
 from middleware import limiter, csrf
 from models import db, bcrypt, User, File
+import sqlitecloud
 
 app = Flask(__name__)
 app.config.from_object(config)
@@ -13,6 +14,13 @@ app.register_blueprint(auth, url_prefix="/auth")
 limiter.init_app(app)
 csrf.init_app(app)
 
+
+# Set Database URL (SQLite or SQLiteCloud)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///database.db")
+
+
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
 bcrypt.init_app(app)
