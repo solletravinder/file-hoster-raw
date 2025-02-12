@@ -120,7 +120,8 @@
                 fileList.innerHTML = "";
                 data.files.forEach(file => {
                     fileList.innerHTML += `<div class="file-item">
-                        <a href="${file.url}" target="_blank">${file.filename}</a> 
+                        <a href="${file.url}" target="_blank">${file.filename}</a>
+                        (Uploaded: ${new Date(file.uploaded_at).toLocaleString()}) 
                         <button class="delete-btn" data-id="${file.id}" onclick="deleteFile(${file.id})">❌</button>
                     </div>`;
                 });
