@@ -6,7 +6,8 @@ from config import config
 from auth import auth, token_required
 from middleware import limiter, csrf
 from models import db, bcrypt, User, File
-import sqlitecloud
+# import sqlitecloud
+from sqlalchemy.sql import text
 
 app = Flask(__name__)
 app.config.from_object(config)
@@ -64,7 +65,7 @@ def index():
 def keep_db_alive():
     try:
         # Attempt to execute a simple query to check the database connection
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
         return jsonify({"status": "success", "message": "Database connection is alive"}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
