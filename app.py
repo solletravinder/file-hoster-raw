@@ -59,6 +59,18 @@ def file_size_limit(file):
 def index():
     return render_template('index.html')
 
+
+@app.route("/keep-db-alive", methods=["GET"])
+def keep_db_alive():
+    try:
+        # Attempt to execute a simple query to check the database connection
+        db.session.execute('SELECT 1')
+        return jsonify({"status": "success", "message": "Database connection is alive"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
 @app.route("/delete-file/<int:file_id>", methods=["DELETE"])
 @token_required
 def delete_file(current_user, file_id):
