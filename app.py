@@ -30,6 +30,13 @@ with app.app_context():
     db.create_all()
 
 
+def user_rate_limit():
+    user_id = request.headers.get("X-User-ID", "guest")
+    if user_id == "admin":
+        return "100 per minute"  # Admin users get higher limits
+    return "10 per minute"  # Regular users
+
+
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -56,12 +63,20 @@ def file_size_limit(file):
     else:
         return size <= 1 * 1024 * 1024 * 1024  # 1GB limit for all other files
 
+
+@app.errorhandler(429)
+def ratelimit_exceeded(e):
+    return {"error": "Too many requests! Please try again later."}, 429
+
+
 @app.route('/')
+@limiter.exempt
 def index():
     return render_template('index.html')
 
 
 @app.route("/keep-db-alive", methods=["GET"])
+@limiter.exempt
 def keep_db_alive():
     try:
         # Attempt to execute a simple query to check the database connection
@@ -74,6 +89,7 @@ def keep_db_alive():
 
 @app.route("/delete-file/<int:file_id>", methods=["DELETE"])
 @token_required
+@limiter.limit(user_rate_limit)
 def delete_file(current_user, file_id):
     file = File.query.filter_by(id=file_id, user_id=current_user.id).first()
     
@@ -110,6 +126,7 @@ def my_files(current_user):
 
 @app.route("/upload", methods=["POST"])
 @token_required
+@limiter.limit(user_rate_limit)
 def upload_file(current_user):
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400

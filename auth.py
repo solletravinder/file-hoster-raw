@@ -5,10 +5,19 @@ import datetime
 from config import config
 from models import db, User
 from functools import wraps
+from middleware import limiter
 
 auth = Blueprint("auth", __name__)
 
+def user_rate_limit():
+    user_id = request.headers.get("X-User-ID", "guest")
+    if user_id == "admin":
+        return "100 per minute"  # Admin users get higher limits
+    return "10 per minute"  # Regular users
+
+
 @auth.route('/login', methods=['POST'])
+@limiter.limit(user_rate_limit)
 def login():
     try:
         data = request.json
@@ -65,6 +74,7 @@ def token_required(f):
 
 
 @auth.route("/register", methods=["POST"])
+@limiter.limit(user_rate_limit)
 def register():
     data = request.json
     if not data or "username" not in data or "password" not in data:
