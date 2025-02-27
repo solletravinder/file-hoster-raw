@@ -5,27 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>File Hosting Service</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 20px;
-        }
-        .container {
-            max-width: 500px;
-            margin: auto;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            background-color: #f9f9f9;
-        }
-        input, button {
-            margin: 10px 0;
-            padding: 10px;
-            width: 100%;
-        }
-        .hidden {
-            display: none;
-        }
+        body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
+        .container { max-width: 500px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px; background-color: #f9f9f9; }
+        input, button { margin: 10px 0; padding: 10px; width: 100%; }
+        .hidden { display: none; }
+        #progress { width: 100%; background: #ddd; margin: 10px 0; height: 20px; display: none; }
+        #progress-bar { height: 100%; width: 0%; background-color: #4CAF50; }
         .file-item {
             display: flex;
             justify-content: space-between;
@@ -61,16 +46,17 @@
             <button onclick="login()">Login</button>
             <button onclick="register()">Register</button>
         </div>
-        <button onclick="logout()" class="hidden" id="logout-btn">Logout</button>
+        <button onclick="logout()" id="logout-btn" class="hidden">Logout</button>
 
         <!-- Upload Section -->
         <div id="upload-section" class="hidden">
             <h3>Upload File</h3>
             <input type="file" id="file-input">
             <button onclick="uploadFile()">Upload</button>
-            <div id="loader">Uploading...</div>
+            <div id="progress">
+                <div id="progress-bar"></div>
+            </div>
         </div>
-
         <!-- File List -->
         <h3 id="file-list-heading" class="hidden">Your Files</h3>
         <div id="file-list" class="hidden"></div>
@@ -79,29 +65,6 @@
     <script>
         let token = localStorage.getItem("token");
         let csrfToken = document.getElementById("csrf_token").value;
-
-        function updateUI() {
-            if (token) {
-                document.getElementById("auth-section").classList.add("hidden");
-                document.getElementById("upload-section").classList.remove("hidden");
-                document.getElementById("logout-btn").classList.remove("hidden");
-                document.getElementById("file-list").classList.remove("hidden");
-                document.getElementById("file-list-heading").classList.remove("hidden");
-                loadFiles();
-            } else {
-                document.getElementById("auth-section").classList.remove("hidden");
-                document.getElementById("upload-section").classList.add("hidden");
-                document.getElementById("logout-btn").classList.add("hidden");
-                document.getElementById("file-list").classList.add("hidden");
-                document.getElementById("file-list-heading").classList.add("hidden");
-            }
-        }
-
-        function logout() {
-            localStorage.removeItem("token");
-            token = null;
-            updateUI();
-        }
 
         async function loadFiles() {
             if (!token) {
@@ -130,14 +93,35 @@
             }
         }
 
+        function updateUI() {
+            if (token) {
+                document.getElementById("auth-section").classList.add("hidden");
+                document.getElementById("upload-section").classList.remove("hidden");
+                document.getElementById("logout-btn").classList.remove("hidden"); // ✅ Fix logout button
+                document.getElementById("file-list").classList.remove("hidden");
+                document.getElementById("file-list-heading").classList.remove("hidden");
+                loadFiles();
+            } else {
+                document.getElementById("auth-section").classList.remove("hidden");
+                document.getElementById("upload-section").classList.add("hidden");
+                document.getElementById("logout-btn").classList.add("hidden");
+                document.getElementById("file-list").classList.add("hidden");
+                document.getElementById("file-list-heading").classList.add("hidden");
+            }
+        }
 
-        // Register function
+        function logout() {
+            localStorage.removeItem("token");
+            token = null;
+            updateUI();
+        }
+
         async function register() {
             const username = document.getElementById("username").value;
             const password = document.getElementById("password").value;
             const response = await fetch("/auth/register", {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrfToken },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username, password }),
             });
 
@@ -163,48 +147,120 @@
                 token = data.token;
                 localStorage.setItem("token", token);
                 alert("Login successful!");
-                loadFiles();
                 updateUI();
             } else {
                 alert(data.error);
             }
         }
 
+        // ✅ Resumable Uploads
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                let request = indexedDB.open("UploadDB", 1);
+                request.onupgradeneeded = event => event.target.result.createObjectStore("uploads", { keyPath: "fileName" });
+                request.onsuccess = event => resolve(event.target.result);
+                request.onerror = event => reject(event.target.error);
+            });
+        }
+
+        function saveProgress(fileName, progress) {
+            openDB().then(db => {
+                let tx = db.transaction("uploads", "readwrite");
+                let store = tx.objectStore("uploads");
+                store.put({ fileName, progress });
+            });
+        }
+
+        function getProgress(fileName) {
+            return new Promise(resolve => {
+                openDB().then(db => {
+                    let tx = db.transaction("uploads", "readonly");
+                    let store = tx.objectStore("uploads");
+                    let request = store.get(fileName);
+                    request.onsuccess = () => resolve(request.result ? request.result.progress : 0);
+                    request.onerror = () => resolve(0);
+                });
+            });
+        }
+
         async function uploadFile() {
             const fileInput = document.getElementById("file-input");
             if (!fileInput.files.length) {
-                alert("Please select a file");
+                alert("Please select a file.");
                 return;
             }
-            
-            document.getElementById("loader").style.display = "block";
 
-            const formData = new FormData();
-            formData.append("file", fileInput.files[0]);
+            const file = fileInput.files[0];
+            const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            let progressBar = document.getElementById("progress-bar");
+            let progressContainer = document.getElementById("progress");
+            progressContainer.style.display = "block";
 
-            try {
-                const response = await fetch("/upload", {
-                    method: "POST",
-                    headers: { 
-                        "Authorization": `Bearer ${token}`,
-                        "X-CSRF-TOKEN": csrfToken
-                    },
-                    body: formData,
-                });
+            let uploadedChunks = await getProgress(file.name);
 
-                const data = await response.json();
-                if (response.ok) {
-                    alert("File uploaded successfully!");
-                    loadFiles();
-                } else {
-                    alert(data.error);
-                }
-            } catch (error) {
-                console.error("Upload failed:", error);
-                alert("Upload failed. Please try again.");
-            } finally {
-                document.getElementById("loader").style.display = "none";
+            const initResponse = await fetch("/initiate-upload", {
+                method: "POST",
+                body: JSON.stringify({ file_name: file.name, file_type: file.type }),
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-CSRF-TOKEN": csrfToken },
+            });
+
+            const { upload_id } = await initResponse.json();
+            if (!upload_id) {
+                alert("Upload initiation failed!");
+                return;
             }
+
+            let parts = [];
+
+            for (let partNumber = uploadedChunks + 1; partNumber <= totalChunks; partNumber++) {
+                const start = (partNumber - 1) * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const chunk = file.slice(start, end);
+                let retries = 3;
+
+                while (retries > 0) {
+                    try {
+                        const partResponse = await fetch("/generate-part-url", {
+                            method: "POST",
+                            body: JSON.stringify({ file_name: file.name, upload_id, part_number: partNumber }),
+                            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-CSRF-TOKEN": csrfToken },
+                        });
+
+                        const { url } = await partResponse.json();
+                        const uploadResponse = await fetch(url, { method: "PUT", body: chunk });
+
+                        if (!uploadResponse.ok) throw new Error("Upload failed");
+
+                        const eTag = uploadResponse.headers.get("ETag");
+                        parts.push({ PartNumber: partNumber, ETag: eTag });
+
+                        uploadedChunks = partNumber;
+                        saveProgress(file.name, uploadedChunks);
+
+                        progressBar.style.width = `${(uploadedChunks / totalChunks) * 100}%`;
+
+                        break; 
+                    } catch (error) {
+                        retries--;
+                        console.error(`Retrying part ${partNumber}, remaining attempts: ${retries}`);
+                        if (retries === 0) {
+                            alert(`Failed to upload part ${partNumber}, please retry.`);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            await fetch("/complete-upload", {
+                method: "POST",
+                body: JSON.stringify({ file_name: file.name, upload_id, parts }),
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-CSRF-TOKEN": csrfToken },
+            });
+
+            alert("Upload Complete!");
+            progressBar.style.width = "100%";
+            saveProgress(file.name, totalChunks);
         }
 
         async function deleteFile(fileId) {

@@ -144,5 +144,67 @@ def upload_file(current_user):
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+
+
+# Step 1: Initiate Multipart Upload
+@app.route("/initiate-upload", methods=["POST"])
+@token_required
+def initiate_upload(current_user):
+    data = request.json
+    file_name = data["file_name"]
+    file_type = data["file_type"]
+
+    try:
+        response = s3_client.create_multipart_upload(Bucket=config.SPACE_NAME, Key=file_name, ContentType=file_type)
+        return jsonify({"upload_id": response["UploadId"]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Step 2: Generate Pre-Signed URLs for Parts
+@app.route("/generate-part-url", methods=["POST"])
+@token_required
+def generate_part_url(current_user):
+    data = request.json
+    file_name = data["file_name"]
+    upload_id = data["upload_id"]
+    part_number = data["part_number"]
+
+    try:
+        url = s3_client.generate_presigned_url(
+            "upload_part",
+            Params={
+                "Bucket": config.SPACE_NAME,
+                "Key": file_name,
+                "UploadId": upload_id,
+                "PartNumber": part_number,
+            },
+            ExpiresIn=3600,
+        )
+        return jsonify({"url": url})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Step 3: Complete Multipart Upload
+@app.route("/complete-upload", methods=["POST"])
+@token_required
+def complete_upload(current_user):
+    data = request.json
+    file_name = data["file_name"]
+    upload_id = data["upload_id"]
+    parts = data["parts"]  # List of uploaded parts (part numbers & ETags)
+
+    try:
+        response = s3_client.complete_multipart_upload(
+            Bucket=config.SPACE_NAME,
+            Key=file_name,
+            UploadId=upload_id,
+            MultipartUpload={"Parts": parts},
+        )
+        return jsonify({"message": "Upload complete!", "location": response["Location"]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
 if __name__ == '__main__':
     app.run(debug=True)
