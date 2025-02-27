@@ -169,7 +169,7 @@ def initiate_upload(current_user):
         )
         return jsonify({"upload_id": response["UploadId"]})
     except Exception as e:
-        print(traceback.print_stack())
+        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 # Step 2: Generate Pre-Signed URLs for Parts
@@ -197,7 +197,7 @@ def generate_part_url(current_user):
         response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, HEAD")
         return response
     except Exception as e:
-        print(traceback.print_stack())
+        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 # Step 3: Complete Multipart Upload
@@ -218,7 +218,7 @@ def complete_upload(current_user):
         )
         return jsonify({"message": "Upload complete!", "location": response["Location"]})
     except Exception as e:
-        print(traceback.print_stack())
+        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 
