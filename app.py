@@ -1,5 +1,5 @@
 import os
-import boto3
+import boto3, traceback
 from flask import Flask, request, jsonify, send_from_directory, render_template
 from werkzeug.utils import secure_filename
 from config import config
@@ -169,6 +169,7 @@ def initiate_upload(current_user):
         )
         return jsonify({"upload_id": response["UploadId"]})
     except Exception as e:
+        print(traceback.print_stack())
         return jsonify({"error": str(e)}), 500
 
 # Step 2: Generate Pre-Signed URLs for Parts
@@ -196,6 +197,7 @@ def generate_part_url(current_user):
         response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, HEAD")
         return response
     except Exception as e:
+        print(traceback.print_stack())
         return jsonify({"error": str(e)}), 500
 
 # Step 3: Complete Multipart Upload
@@ -216,6 +218,7 @@ def complete_upload(current_user):
         )
         return jsonify({"message": "Upload complete!", "location": response["Location"]})
     except Exception as e:
+        print(traceback.print_stack())
         return jsonify({"error": str(e)}), 500
 
 
