@@ -228,7 +228,7 @@
                         });
 
                         const { url } = await partResponse.json();
-                        const uploadResponse = await fetch(url, { method: "PUT", body: chunk });
+                        const uploadResponse = await fetch(url, { method: "PUT", body: chunk, headers: { "Content-Type": "application/octet-stream" } });
 
                         if (!uploadResponse.ok) throw new Error("Upload failed");
 

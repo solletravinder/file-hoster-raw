@@ -8,6 +8,9 @@ from middleware import limiter, csrf
 from models import db, bcrypt, User, File
 # import sqlitecloud
 from sqlalchemy.sql import text
+# import certifi
+# from pydo import Client
+
 
 app = Flask(__name__)
 app.config.from_object(config)
@@ -35,12 +38,16 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'txt', 'zip', 'mp4', 'avi', 'mkv', 'mov'}
 
-s3_client = boto3.client(
+
+# s3_client = Client(token=config.SECRET_KEY_DO)
+session = boto3.session.Session()
+s3_client = session.client(
     "s3",
+    region_name=config.REGION,
     endpoint_url=config.ENDPOINT_URL,
     aws_access_key_id=config.ACCESS_KEY,
     aws_secret_access_key=config.SECRET_KEY_DO,
-    verify=False
+    # verify=certifi.where()
 )
 
 def allowed_file(filename):
@@ -155,7 +162,11 @@ def initiate_upload(current_user):
     file_type = data["file_type"]
 
     try:
-        response = s3_client.create_multipart_upload(Bucket=config.SPACE_NAME, Key=file_name, ContentType=file_type)
+        response = s3_client.create_multipart_upload(
+            Bucket=config.SPACE_NAME,
+            Key=file_name,
+            ContentType=file_type
+        )
         return jsonify({"upload_id": response["UploadId"]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -180,7 +191,10 @@ def generate_part_url(current_user):
             },
             ExpiresIn=3600,
         )
-        return jsonify({"url": url})
+        response = jsonify({"url": url})
+        response.headers.add("Access-Control-Allow-Origin", "*")  # Allow frontend requests
+        response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, HEAD")
+        return response
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -198,7 +212,7 @@ def complete_upload(current_user):
             Bucket=config.SPACE_NAME,
             Key=file_name,
             UploadId=upload_id,
-            MultipartUpload={"Parts": parts},
+            MultipartUpload={"Parts": parts}
         )
         return jsonify({"message": "Upload complete!", "location": response["Location"]})
     except Exception as e:
