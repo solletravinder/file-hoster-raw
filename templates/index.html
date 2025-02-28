@@ -84,7 +84,9 @@
                 fileList.innerHTML = "";
                 data.files.forEach(file => {
                     fileList.innerHTML += `<div class="file-item">
-                        <a href="${file.url}" target="_blank">${file.filename}</a>
+                        <button onclick="fetchPresignedUrl('${file.filename}', '${file.file_type}')" class="file-link">
+                            ${file.filename}
+                        </button>
                         (Uploaded: ${new Date(file.uploaded_at).toLocaleString()}) 
                         <button class="delete-btn" data-id="${file.id}" onclick="deleteFile(${file.id})">❌</button>
                     </div>`;
@@ -248,6 +250,32 @@
                 console.error("Upload Error:", error);
                 document.getElementById("status").innerText = "Upload failed! ❌";
                 alert(error.message);
+            }
+        }
+
+        async function fetchPresignedUrl(fileName, fileType) {
+            try {
+                // Call the API to generate a new pre-signed URL
+                const response = await fetch("/get-presigned-url", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`,
+                        "X-CSRF-TOKEN": csrfToken
+                    },
+                    body: JSON.stringify({ file_name: fileName, file_type: fileType}),
+                });
+
+                const data = await response.json();
+                if (response.ok && data.file_url) {
+                    // Open the file using the pre-signed URL
+                    window.open(data.file_url, "_blank");
+                } else {
+                    alert("Failed to get pre-signed URL.");
+                }
+            } catch (error) {
+                console.error("Error fetching pre-signed URL:", error);
+                alert("An error occurred while fetching the file.");
             }
         }
 

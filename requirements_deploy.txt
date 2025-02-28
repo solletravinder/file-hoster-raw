@@ -12,4 +12,5 @@ Werkzeug==3.0.1
 requests==2.31.0
 boto3==1.34.43
 cryptography==42.0.2
+flask-migrate
 # certifi

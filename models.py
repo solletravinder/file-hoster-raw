@@ -20,6 +20,7 @@ class User(db.Model):
 class File(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(255), nullable=False)
+    file_type = db.Column(db.String(255), nullable=True)
     file_url = db.Column(db.String(500), nullable=False)  # DigitalOcean Spaces URL
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)

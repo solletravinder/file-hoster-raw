@@ -8,7 +8,9 @@ from middleware import limiter, csrf
 from models import db, bcrypt, User, File
 # import sqlitecloud
 from sqlalchemy.sql import text
-from botocore.config import Config
+import urllib.parse
+from flask_migrate import Migrate
+# from botocore.config import Config
 # import certifi
 # from pydo import Client
 
@@ -30,6 +32,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
 bcrypt.init_app(app)
+migrate = Migrate(app, db)
 
 with app.app_context():
     db.create_all()
@@ -125,6 +128,7 @@ def my_files(current_user):
     files_list = [{
         "id": file.id,
         "filename": file.filename,
+        "file_type": file.file_type,
         "url": file.file_url,
         "uploaded_at": file.uploaded_at
     } for file in user_files]
@@ -249,7 +253,8 @@ def save_file_metadata(current_user):
     try:
         data = request.json
         file_name = data.get("file_name")
-        file_url = f"{config.ENDPOINT_URL}/{config.SPACE_NAME}/{file_name}"
+        encoded_file_name = urllib.parse.quote(file_name, safe="") 
+        file_url = f"{config.ENDPOINT_URL}/{config.SPACE_NAME}/{encoded_file_name}"
 
         if not file_name:
             return jsonify({"error": "Missing file_name"}), 400
@@ -298,6 +303,28 @@ def generate_presigned_url(current_user):
 
     except Exception as e:
         print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/get-presigned-url", methods=["POST"])
+@token_required
+def get_presigned_url(current_user):
+    """ Generate a presigned URL for direct file upload to Spaces """
+    data = request.json
+    file_name = data.get("file_name")
+    file_type = data.get("file_type")
+
+    if not file_name:
+        return jsonify({"error": "File name is required"}), 400
+
+    try:
+        presigned_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": config.SPACE_NAME, "Key": file_name},
+            ExpiresIn=3600  # URL expires in 1 hour
+        )
+        return jsonify({"file_url": presigned_url})
+
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
