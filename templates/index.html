@@ -187,11 +187,13 @@
         async function uploadFile() {
             const fileInput = document.getElementById("file-input");
             const file = fileInput.files[0];
-
+            
             if (!file) {
                 alert("Please select a file!");
                 return;
             }
+            const fileType = file.type;
+            const fileName = file.name;
 
             document.getElementById("status").innerText = "Generating upload URL...";
 
@@ -200,7 +202,7 @@
                 const presignedRes = await fetch("/generate-presigned-url", {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrfToken, "Authorization": `Bearer ${token}` },
-                    body: JSON.stringify({ file_name: file.name })
+                    body: JSON.stringify({ file_name: fileName, file_type: fileType }),
                 });
 
                 const presignedData = await presignedRes.json();
@@ -215,8 +217,10 @@
                 const uploadRes = await fetch(presignedUrl, {
                     method: "PUT",
                     headers: {
-                        "Content-Type": "application/octet-stream",
-                        "Content-Length": file.size // Not always needed in fetch
+                        "Content-Type": fileType,
+                        "Content-Length": file.size, // Not always needed in fetch
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, HEAD"
                     },
                     body: file
                 });
@@ -236,6 +240,7 @@
 
                 document.getElementById("status").innerText = "File uploaded & metadata saved! ✅";
                 alert("File uploaded & metadata saved!");
+                loadFiles();
                 // alert("File uploaded successfully!");
 
 

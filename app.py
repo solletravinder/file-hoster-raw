@@ -8,6 +8,7 @@ from middleware import limiter, csrf
 from models import db, bcrypt, User, File
 # import sqlitecloud
 from sqlalchemy.sql import text
+from botocore.config import Config
 # import certifi
 # from pydo import Client
 
@@ -48,8 +49,23 @@ s3_client = session.client(
     endpoint_url=config.ENDPOINT_URL,
     aws_access_key_id=config.ACCESS_KEY,
     aws_secret_access_key=config.SECRET_KEY_DO,
+    # config=Config(signature_version="s3v4"),
     # verify=certifi.where()
 )
+
+cors_configuration = {
+    "CORSRules": [
+        {
+            "AllowedOrigins": ["*"],  # Allow all origins (change to your domain in production)
+            "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+            "AllowedHeaders": ["*"],
+            "ExposeHeaders": ["ETag"],
+            "MaxAgeSeconds": 3000,
+        }
+    ]
+}
+
+s3_client.put_bucket_cors(Bucket=config.SPACE_NAME, CORSConfiguration=cors_configuration)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -257,6 +273,7 @@ def generate_presigned_url(current_user):
     try:
         data = request.json
         file_name = data.get("file_name")
+        file_type = data.get("file_type")
 
         if not file_name:
             return jsonify({"error": "Missing file_name"}), 400
@@ -264,8 +281,9 @@ def generate_presigned_url(current_user):
         # Generate presigned URL for direct upload
         presigned_url = s3_client.generate_presigned_url(
             "put_object",
-            Params={"Bucket": config.SPACE_NAME, "Key": file_name, "ContentType": "application/octet-stream"},
-            ExpiresIn=3600  # URL valid for 1 hour
+            Params={"Bucket": config.SPACE_NAME, "Key": file_name, "ContentType": file_type},
+            ExpiresIn=3600,  # URL valid for 1 hour
+            HttpMethod="PUT"
         )
 
         return jsonify({"url": presigned_url, "file_name": file_name})
