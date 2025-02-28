@@ -290,7 +290,11 @@ def generate_presigned_url(current_user):
         print(file_name)
         print(presigned_url)
 
-        return jsonify({"url": presigned_url, "file_name": file_name})
+        response = jsonify({"url": presigned_url, "file_name": file_name})
+        # response.headers.add("Access-Control-Allow-Origin", "*")
+        # response.headers.add("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
+        # response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization, ETag")
+        return response
 
     except Exception as e:
         print(traceback.format_exc())
