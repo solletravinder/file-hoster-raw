@@ -53,19 +53,19 @@ s3_client = session.client(
     # verify=certifi.where()
 )
 
-cors_configuration = {
-    "CORSRules": [
-        {
-            "AllowedOrigins": ["*"],  # Allow all origins (change to your domain in production)
-            "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-            "AllowedHeaders": ["*"],
-            "ExposeHeaders": ["ETag"],
-            "MaxAgeSeconds": 3000,
-        }
-    ]
-}
+# cors_configuration = {
+#     "CORSRules": [
+#         {
+#             "AllowedOrigins": ["*"],  # Allow all origins (change to your domain in production)
+#             "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+#             "AllowedHeaders": ["*"],
+#             "ExposeHeaders": ["ETag"],
+#             "MaxAgeSeconds": 3000,
+#         }
+#     ]
+# }
 
-s3_client.put_bucket_cors(Bucket=config.SPACE_NAME, CORSConfiguration=cors_configuration)
+# s3_client.put_bucket_cors(Bucket=config.SPACE_NAME, CORSConfiguration=cors_configuration)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
