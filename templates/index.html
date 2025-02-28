@@ -53,6 +53,7 @@
             <h3>Upload File</h3>
             <input type="file" id="file-input">
             <button onclick="uploadFile()">Upload</button>
+            <div id="status"></div>
             <div id="progress">
                 <div id="progress-bar"></div>
             </div>
@@ -185,83 +186,145 @@
 
         async function uploadFile() {
             const fileInput = document.getElementById("file-input");
-            if (!fileInput.files.length) {
-                alert("Please select a file.");
-                return;
-            }
-
             const file = fileInput.files[0];
-            const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
-            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-            let progressBar = document.getElementById("progress-bar");
-            let progressContainer = document.getElementById("progress");
-            progressContainer.style.display = "block";
 
-            let uploadedChunks = await getProgress(file.name);
-
-            const initResponse = await fetch("/initiate-upload", {
-                method: "POST",
-                body: JSON.stringify({ file_name: file.name, file_type: file.type }),
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-CSRF-TOKEN": csrfToken },
-            });
-
-            const { upload_id } = await initResponse.json();
-            if (!upload_id) {
-                alert("Upload initiation failed!");
+            if (!file) {
+                alert("Please select a file!");
                 return;
             }
 
-            let parts = [];
+            document.getElementById("status").innerText = "Generating upload URL...";
 
-            for (let partNumber = uploadedChunks + 1; partNumber <= totalChunks; partNumber++) {
-                const start = (partNumber - 1) * CHUNK_SIZE;
-                const end = Math.min(start + CHUNK_SIZE, file.size);
-                const chunk = file.slice(start, end);
-                let retries = 3;
+            try {
+                // Step 1: Request a presigned URL from Flask backend
+                const presignedRes = await fetch("/generate-presigned-url", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrfToken, "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify({ file_name: file.name })
+                });
 
-                while (retries > 0) {
-                    try {
-                        const partResponse = await fetch("/generate-part-url", {
-                            method: "POST",
-                            body: JSON.stringify({ file_name: file.name, upload_id, part_number: partNumber }),
-                            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-CSRF-TOKEN": csrfToken },
-                        });
+                const presignedData = await presignedRes.json();
+                if (!presignedRes.ok) throw new Error(presignedData.error || "Failed to get upload URL");
 
-                        const { url } = await partResponse.json();
-                        const uploadResponse = await fetch(url, { method: "PUT", body: chunk, headers: { "Content-Type": "application/octet-stream" } });
+                const presignedUrl = presignedData.url;
+                console.log("Presigned URL:", presignedUrl);
 
-                        if (!uploadResponse.ok) throw new Error("Upload failed");
+                document.getElementById("status").innerText = "Uploading file...";
 
-                        const eTag = uploadResponse.headers.get("ETag");
-                        parts.push({ PartNumber: partNumber, ETag: eTag });
+                // Step 2: Upload file directly to DigitalOcean Spaces
+                const uploadRes = await fetch(presignedUrl, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/octet-stream",
+                        "Content-Length": file.size // Not always needed in fetch
+                    },
+                    body: file
+                });
 
-                        uploadedChunks = partNumber;
-                        saveProgress(file.name, uploadedChunks);
+                if (!uploadRes.ok) throw new Error("Upload failed!");
 
-                        progressBar.style.width = `${(uploadedChunks / totalChunks) * 100}%`;
+                // document.getElementById("status").innerText = "Upload successful! ✅";
+                // Step 3: Store metadata in DB
+                const saveRes = await fetch("/save-file-metadata", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrfToken, "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify({ file_name: fileName })
+                });
 
-                        break; 
-                    } catch (error) {
-                        retries--;
-                        console.error(`Retrying part ${partNumber}, remaining attempts: ${retries}`);
-                        if (retries === 0) {
-                            alert(`Failed to upload part ${partNumber}, please retry.`);
-                            return;
-                        }
-                    }
-                }
+                const saveData = await saveRes.json();
+                if (!saveRes.ok) throw new Error(saveData.error || "Failed to save metadata");
+
+                document.getElementById("status").innerText = "File uploaded & metadata saved! ✅";
+                alert("File uploaded & metadata saved!");
+                // alert("File uploaded successfully!");
+
+
+            } catch (error) {
+                console.error("Upload Error:", error);
+                document.getElementById("status").innerText = "Upload failed! ❌";
+                alert(error.message);
             }
-
-            await fetch("/complete-upload", {
-                method: "POST",
-                body: JSON.stringify({ file_name: file.name, upload_id, parts }),
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-CSRF-TOKEN": csrfToken },
-            });
-
-            alert("Upload Complete!");
-            progressBar.style.width = "100%";
-            saveProgress(file.name, totalChunks);
         }
+
+        // async function uploadFile() {
+        //     const fileInput = document.getElementById("file-input");
+        //     if (!fileInput.files.length) {
+        //         alert("Please select a file.");
+        //         return;
+        //     }
+
+        //     const file = fileInput.files[0];
+        //     const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
+        //     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+        //     let progressBar = document.getElementById("progress-bar");
+        //     let progressContainer = document.getElementById("progress");
+        //     progressContainer.style.display = "block";
+
+        //     let uploadedChunks = await getProgress(file.name);
+
+        //     const initResponse = await fetch("/initiate-upload", {
+        //         method: "POST",
+        //         body: JSON.stringify({ file_name: file.name, file_type: file.type }),
+        //         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-CSRF-TOKEN": csrfToken },
+        //     });
+
+        //     const { upload_id } = await initResponse.json();
+        //     if (!upload_id) {
+        //         alert("Upload initiation failed!");
+        //         return;
+        //     }
+
+        //     let parts = [];
+
+        //     for (let partNumber = uploadedChunks + 1; partNumber <= totalChunks; partNumber++) {
+        //         const start = (partNumber - 1) * CHUNK_SIZE;
+        //         const end = Math.min(start + CHUNK_SIZE, file.size);
+        //         const chunk = file.slice(start, end);
+        //         let retries = 3;
+
+        //         while (retries > 0) {
+        //             try {
+        //                 const partResponse = await fetch("/generate-part-url", {
+        //                     method: "POST",
+        //                     body: JSON.stringify({ file_name: file.name, upload_id, part_number: partNumber }),
+        //                     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-CSRF-TOKEN": csrfToken },
+        //                 });
+
+        //                 const { url } = await partResponse.json();
+        //                 const uploadResponse = await fetch(url, { method: "PUT", body: chunk, headers: { "Content-Type": "application/octet-stream" } });
+
+        //                 if (!uploadResponse.ok) throw new Error("Upload failed");
+
+        //                 const eTag = uploadResponse.headers.get("ETag");
+        //                 parts.push({ PartNumber: partNumber, ETag: eTag });
+
+        //                 uploadedChunks = partNumber;
+        //                 saveProgress(file.name, uploadedChunks);
+
+        //                 progressBar.style.width = `${(uploadedChunks / totalChunks) * 100}%`;
+
+        //                 break; 
+        //             } catch (error) {
+        //                 retries--;
+        //                 console.error(`Retrying part ${partNumber}, remaining attempts: ${retries}`);
+        //                 if (retries === 0) {
+        //                     alert(`Failed to upload part ${partNumber}, please retry.`);
+        //                     return;
+        //                 }
+        //             }
+        //         }
+        //     }
+
+        //     await fetch("/complete-upload", {
+        //         method: "POST",
+        //         body: JSON.stringify({ file_name: file.name, upload_id, parts }),
+        //         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "X-CSRF-TOKEN": csrfToken },
+        //     });
+
+        //     alert("Upload Complete!");
+        //     progressBar.style.width = "100%";
+        //     saveProgress(file.name, totalChunks);
+        // }
 
         async function deleteFile(fileId) {
             if (!confirm("Are you sure you want to delete this file?")) return;

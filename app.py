@@ -1,5 +1,5 @@
 import os
-import boto3, traceback
+import boto3, traceback, logging
 from flask import Flask, request, jsonify, send_from_directory, render_template
 from werkzeug.utils import secure_filename
 from config import config
@@ -11,6 +11,7 @@ from sqlalchemy.sql import text
 # import certifi
 # from pydo import Client
 
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config.from_object(config)
@@ -115,35 +116,35 @@ def my_files(current_user):
     return jsonify({"files": files_list}), 200
 
 
-@app.route("/upload", methods=["POST"])
-@token_required
-def upload_file(current_user):
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+# @app.route("/upload", methods=["POST"])
+# @token_required
+# def upload_file(current_user):
+#     if "file" not in request.files:
+#         return jsonify({"error": "No file uploaded"}), 400
 
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "Invalid file"}), 400
+#     file = request.files["file"]
+#     if file.filename == "":
+#         return jsonify({"error": "Invalid file"}), 400
 
-    filename = secure_filename(file.filename)
+#     filename = secure_filename(file.filename)
 
-    # Save locally (temporary)
-    file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-    file.save(file_path)
+#     # Save locally (temporary)
+#     file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+#     file.save(file_path)
 
-    # Upload to DigitalOcean Spaces
-    try:
-        s3_client.upload_file(file_path, config.SPACE_NAME, filename, ExtraArgs={"ACL": "public-read"})
-        file_url = f"{config.ENDPOINT_URL}/{config.SPACE_NAME}/{filename}"
-    except Exception as e:
-        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
+#     # Upload to DigitalOcean Spaces
+#     try:
+#         s3_client.upload_file(file_path, config.SPACE_NAME, filename, ExtraArgs={"ACL": "public-read"})
+#         file_url = f"{config.ENDPOINT_URL}/{config.SPACE_NAME}/{filename}"
+#     except Exception as e:
+#         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
-    # Save file metadata to the database
-    new_file = File(filename=filename, file_url=file_url, user_id=current_user.id)
-    db.session.add(new_file)
-    db.session.commit()
+#     # Save file metadata to the database
+#     new_file = File(filename=filename, file_url=file_url, user_id=current_user.id)
+#     db.session.add(new_file)
+#     db.session.commit()
 
-    return jsonify({"message": "File uploaded", "url": file_url})
+#     return jsonify({"message": "File uploaded", "url": file_url})
 
 
 @app.route('/uploads/<filename>')
@@ -169,6 +170,7 @@ def initiate_upload(current_user):
         )
         return jsonify({"upload_id": response["UploadId"]})
     except Exception as e:
+        logger.debug(traceback.format_exc())
         print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
@@ -197,6 +199,7 @@ def generate_part_url(current_user):
         response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, HEAD")
         return response
     except Exception as e:
+        logger.debug(traceback.format_exc())
         print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
@@ -221,6 +224,54 @@ def complete_upload(current_user):
         print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
+
+
+@app.route("/save-file-metadata", methods=["POST"])
+@token_required
+def save_file_metadata(current_user):
+    """ Save file details in the database """
+    try:
+        data = request.json
+        file_name = data.get("file_name")
+        file_url = f"{config.ENDPOINT_URL}/{config.SPACE_NAME}/{file_name}"
+
+        if not file_name:
+            return jsonify({"error": "Missing file_name"}), 400
+
+        # Save to Database
+        user_id = current_user.id
+        new_file = File(filename=file_name, file_url=file_url, user_id=user_id)
+        db.session.add(new_file)
+        db.session.commit()
+
+        return jsonify({"message": "File metadata saved!", "file_url": file_url})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/generate-presigned-url", methods=["POST"])
+@token_required
+def generate_presigned_url(current_user):
+    """ Generate a presigned URL for direct file upload to Spaces """
+    try:
+        data = request.json
+        file_name = data.get("file_name")
+
+        if not file_name:
+            return jsonify({"error": "Missing file_name"}), 400
+
+        # Generate presigned URL for direct upload
+        presigned_url = s3_client.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": config.SPACE_NAME, "Key": file_name, "ContentType": "application/octet-stream"},
+            ExpiresIn=3600  # URL valid for 1 hour
+        )
+
+        return jsonify({"url": presigned_url, "file_name": file_name})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':
